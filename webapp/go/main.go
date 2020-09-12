@@ -978,6 +978,7 @@ func searchEstateNazotte(c echo.Context) error {
 	}
 
 	estatesInPolygon := []Estate{}
+	index := 0
 	for _, estate := range estatesInBoundingBox {
 		validatedEstate := Estate{}
 
@@ -993,6 +994,10 @@ func searchEstateNazotte(c echo.Context) error {
 			}
 		} else {
 			estatesInPolygon = append(estatesInPolygon, validatedEstate)
+			index++
+			if index == NazotteLimit {
+				break
+			}
 		}
 	}
 
