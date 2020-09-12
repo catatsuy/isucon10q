@@ -104,3 +104,16 @@ max_binlog_size   = 100M
 # ssl-cert=/etc/mysql/server-cert.pem
 # ssl-key=/etc/mysql/server-key.pem
 max_allowed_packet = 32505856
+
+
+innodb_buffer_pool_size = 1G
+innodb_data_file_path = ibdata1:10M:autoextend
+innodb_log_buffer_size = 16M
+innodb_log_file_size = 512M
+innodb_doublewrite = 0 # for ISUCON
+innodb_flush_method = O_DIRECT
+innodb_lock_wait_timeout = 5
+innodb_flush_log_at_trx_commit = 0 # for ISUCON
+innodb_file_per_table = ON
+innodb_buffer_pool_dump_at_shutdown = 1
+innodb_buffer_pool_load_at_startup = 1
