@@ -247,14 +247,21 @@ func init() {
 }
 
 func main() {
+	var isDev bool
+	if os.Getenv("DEV") == "1" {
+		isDev = true
+	}
+
 	// Echo instance
 	e := echo.New()
-	e.Debug = true
-	e.Logger.SetLevel(log.DEBUG)
+	if isDev {
+		e.Debug = true
+		e.Logger.SetLevel(log.DEBUG)
 
-	// Middleware
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
+		// Middleware
+		e.Use(middleware.Logger())
+		e.Use(middleware.Recover())
+	}
 
 	// Initialize
 	e.POST("/initialize", initialize)
@@ -278,11 +285,6 @@ func main() {
 	e.GET("/api/recommended_estate/:id", searchRecommendedEstateWithChair)
 
 	mySQLConnectionData = NewMySQLConnectionEnv()
-
-	var isDev bool
-	if os.Getenv("DEV") == "1" {
-		isDev = true
-	}
 
 	var err error
 	if isDev {
