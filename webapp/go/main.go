@@ -876,6 +876,7 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("doorWidthRangeId") != "" {
 		condCount++
+		simple = false
 		doorWidthID, err = strconv.Atoi(c.QueryParam("doorWidthRangeId"))
 		if err != nil {
 			log.Print(err)
@@ -899,6 +900,7 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("rentRangeId") != "" {
 		condCount++
+		simple = false
 		rentID, err = strconv.Atoi(c.QueryParam("rentRangeId"))
 		if err != nil {
 			log.Print(err)

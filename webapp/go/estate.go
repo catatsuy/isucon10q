@@ -1,7 +1,7 @@
 package main
 
 import (
-	//"fmt"
+	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -93,22 +93,22 @@ func initEstateCache() {
 	}
 	sortCountCache()
 
-	//fmt.Println("countbywidth")
+	fmt.Println("countbywidth")
 	//for i, s := range esCountByWidth {
 	//	for j, t := range s {
-	//		fmt.Printf("%v,%v, %+v\n", i, j, t)
+	//		fmt.Printf("%v,%v, w=%v p=%v\n", i, j, t.DoorWidth, t.Popularity)
 	//	}
 	//}
-	//fmt.Println("countbyheight")
+	fmt.Println("countbyheight")
 	//for i, s := range esCountByHeight {
 	//	for j, t := range s {
-	//		fmt.Printf("%v,%v, %+v\n", i, j, t)
+	//		fmt.Printf("%v,%v, h=%v p=%v\n", i, j, t.DoorHeight, t.Popularity)
 	//	}
 	//}
-	//fmt.Println("countbyrent")
+	fmt.Println("countbyrent")
 	//for i, s := range esCountByRent {
 	//	for j, t := range s {
-	//		fmt.Printf("%v,%v, %+v\n", i, j, t)
+	//		fmt.Printf("%v,%v, r=%v p=%v\n", i, j, t.Rent, t.Popularity)
 	//	}
 	//}
 }
@@ -142,7 +142,7 @@ func searchEstateByHeight(heightID int) []Estate {
 	defer mEstate.RUnlock()
 
 	if heightID >= len(esCountByHeight) {
-		panic("bad width id")
+		panic("bad height id")
 	}
 
 	res := make([]Estate, len(esCountByHeight[heightID]))
@@ -155,7 +155,7 @@ func searchEstateByRent(id int) []Estate {
 	defer mEstate.RUnlock()
 
 	if id >= len(esCountByRent) {
-		panic("bad width id")
+		panic("bad rent id")
 	}
 
 	res := make([]Estate, len(esCountByRent[id]))
