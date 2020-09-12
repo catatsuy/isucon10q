@@ -846,7 +846,6 @@ func searchEstates(c echo.Context) error {
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
 
-	simple := true
 	condCount := 0
 	doorHeightID := -1
 	doorWidthID := -1
@@ -901,7 +900,6 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("rentRangeId") != "" {
 		condCount++
-		simple = false
 		rentID, err = strconv.Atoi(c.QueryParam("rentRangeId"))
 		if err != nil {
 			log.Print(err)
@@ -924,8 +922,7 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("features") != "" {
-		condCount++
-		simple = false
+		condCount += 2
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
 			conditions = append(conditions, "features like concat('%', ?, '%')")
 			params = append(params, f)
@@ -949,20 +946,23 @@ func searchEstates(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	if simple && condCount == 1 {
-		estates := []Estate{}
+	estates := []Estate{}
+	var res EstateSearchResponse
+	if condCount == 1 {
 		switch {
 		case doorHeightID > -1:
 			estates = searchEstateByHeight(doorHeightID)
+			//fmt.Printf("heightID=%v, len=%v\n", doorHeightID, len(estates))
 		case doorWidthID > -1:
 			estates = searchEstateByWidth(doorWidthID)
+			//fmt.Printf("width=%v, len=%v\n", doorWidthID, len(estates))
 		case rentID > -1:
 			estates = searchEstateByRent(rentID)
+			//fmt.Printf("rent=%v, len=%v\n", rentID, len(estates))
 		default:
 			panic("XXXX no simple search!!!!")
 		}
 
-		var res EstateSearchResponse
 		res.Count = int64(len(estates))
 		min := perPage * page
 		max := min + perPage
@@ -972,8 +972,9 @@ func searchEstates(c echo.Context) error {
 		if min > len(estates) {
 			min = len(estates)
 		}
-		res.Estates = estates[min:max]
-		return c.JSON(http.StatusOK, res)
+		//fmt.Printf("min=%v max=%v\n", min, max)
+		//res.Estates = estates[min:max]
+		//return c.JSON(http.StatusOK, res)
 	}
 
 	searchQuery := "SELECT * FROM estate WHERE "
@@ -981,15 +982,18 @@ func searchEstates(c echo.Context) error {
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
-	var res EstateSearchResponse
-	err = db2.Get(&res.Count, countQuery+searchCondition, params...)
-	if err != nil {
-		c.Logger().Errorf("searchEstates DB execution error : %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+	if condCount != 1 {
+		var Count int64
+		err = db2.Get(&Count, countQuery+searchCondition, params...)
+		if err != nil {
+			c.Logger().Errorf("searchEstates DB execution error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		res.Count = Count
 	}
 
-	estates := []Estate{}
 	params = append(params, perPage, page*perPage)
+	estates = []Estate{}
 	err = db2.Select(&estates, searchQuery+searchCondition+limitOffset, params...)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -999,6 +1003,16 @@ func searchEstates(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	if condCount == 1 {
+		if len(res.Estates) != len(estates) {
+			fmt.Printf("estate mismatch: %v %v\n", len(res.Estates), len(estates))
+		}
+		for i, es := range res.Estates {
+			if es.ID != estates[i].ID {
+				fmt.Printf("%v %v %v\n", i, es.ID, estates[i].ID)
+			}
+		}
+	}
 	res.Estates = estates
 
 	return c.JSON(http.StatusOK, res)

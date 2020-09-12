@@ -53,9 +53,14 @@ func appendCountCache(es Estate) {
 // 降順そーと
 type byPopularity []Estate
 
-func (a byPopularity) Len() int           { return len(a) }
-func (a byPopularity) Less(i, j int) bool { return a[i].Popularity > a[j].Popularity }
-func (a byPopularity) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a byPopularity) Len() int { return len(a) }
+func (a byPopularity) Less(i, j int) bool {
+	if a[i].Popularity == a[j].Popularity {
+		return a[i].ID < a[j].ID
+	}
+	return a[i].Popularity > a[j].Popularity
+}
+func (a byPopularity) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
 func sortCountCache() {
 	sort.Sort(byPopularity(esCountByWidth[0]))
@@ -72,6 +77,16 @@ func sortCountCache() {
 	sort.Sort(byPopularity(esCountByRent[1]))
 	sort.Sort(byPopularity(esCountByRent[2]))
 	sort.Sort(byPopularity(esCountByRent[3]))
+
+	for i := 0; i < 4; i++ {
+		fmt.Printf("width[%v]=%v\n", i, len(esCountByWidth[i]))
+	}
+	for i := 0; i < 4; i++ {
+		fmt.Printf("height[%v]=%v\n", i, len(esCountByHeight[i]))
+	}
+	for i := 0; i < 4; i++ {
+		fmt.Printf("rent[%v]=%v\n", i, len(esCountByRent[i]))
+	}
 }
 
 func initEstateCache() {
@@ -84,6 +99,8 @@ func initEstateCache() {
 		panic(err)
 	}
 
+	fmt.Printf("estate total=%v\n", len(estateCache))
+
 	esCountByWidth = make([][]Estate, 4)
 	esCountByHeight = make([][]Estate, 4)
 	esCountByRent = make([][]Estate, 4)
@@ -93,19 +110,19 @@ func initEstateCache() {
 	}
 	sortCountCache()
 
-	fmt.Println("countbywidth")
+	//fmt.Println("countbywidth")
 	//for i, s := range esCountByWidth {
 	//	for j, t := range s {
 	//		fmt.Printf("%v,%v, w=%v p=%v\n", i, j, t.DoorWidth, t.Popularity)
 	//	}
 	//}
-	fmt.Println("countbyheight")
+	//fmt.Println("countbyheight")
 	//for i, s := range esCountByHeight {
 	//	for j, t := range s {
 	//		fmt.Printf("%v,%v, h=%v p=%v\n", i, j, t.DoorHeight, t.Popularity)
 	//	}
 	//}
-	fmt.Println("countbyrent")
+	//fmt.Println("countbyrent")
 	//for i, s := range esCountByRent {
 	//	for j, t := range s {
 	//		fmt.Printf("%v,%v, r=%v p=%v\n", i, j, t.Rent, t.Popularity)
