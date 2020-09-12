@@ -331,6 +331,7 @@ func main() {
 	defer db.Close()
 	defer db2.Close()
 
+	initEstateCache()
 	// Start server
 	serverPort := fmt.Sprintf(":%v", getEnv("SERVER_PORT", "1323"))
 	e.Logger.Fatal(e.Start(serverPort))
@@ -474,7 +475,12 @@ func searchChairs(c echo.Context) error {
 	params := make([]interface{}, 0)
 
 	if c.QueryParam("priceRangeId") != "" {
-		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
+		rangeID, err := strconv.Atoi(c.QueryParam("priceRangeId"))
+		if err != nil {
+			c.Echo().Logger.Infof("priceRangeID invalid, %v : %v", c.QueryParam("priceRangeId"), err)
+			return c.NoContent(http.StatusBadRequest)
+		}
+		chairPrice, err := getRange(chairSearchCondition.Price, rangeID)
 		if err != nil {
 			c.Echo().Logger.Infof("priceRangeID invalid, %v : %v", c.QueryParam("priceRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -491,7 +497,12 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("heightRangeId") != "" {
-		chairHeight, err := getRange(chairSearchCondition.Height, c.QueryParam("heightRangeId"))
+		rangeID, err := strconv.Atoi(c.QueryParam("heightRangeId"))
+		if err != nil {
+			c.Echo().Logger.Infof("heightRangeId invalid, %v : %v", c.QueryParam("heightRangeId"), err)
+			return c.NoContent(http.StatusBadRequest)
+		}
+		chairHeight, err := getRange(chairSearchCondition.Height, rangeID)
 		if err != nil {
 			c.Echo().Logger.Infof("heightRangeIf invalid, %v : %v", c.QueryParam("heightRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -508,7 +519,12 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("widthRangeId") != "" {
-		chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
+		rangeID, err := strconv.Atoi(c.QueryParam("widthRangeId"))
+		if err != nil {
+			c.Echo().Logger.Infof("widthRangeId invalid, %v : %v", c.QueryParam("widthRangeId"), err)
+			return c.NoContent(http.StatusBadRequest)
+		}
+		chairWidth, err := getRange(chairSearchCondition.Width, rangeID)
 		if err != nil {
 			c.Echo().Logger.Infof("widthRangeID invalid, %v : %v", c.QueryParam("widthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -525,7 +541,12 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("depthRangeId") != "" {
-		chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
+		rangeID, err := strconv.Atoi(c.QueryParam("depthRangeId"))
+		if err != nil {
+			c.Echo().Logger.Infof("depthRangeId invalid, %v : %v", c.QueryParam("heightRangeId"), err)
+			return c.NoContent(http.StatusBadRequest)
+		}
+		chairDepth, err := getRange(chairSearchCondition.Depth, rangeID)
 		if err != nil {
 			c.Echo().Logger.Infof("depthRangeId invalid, %v : %v", c.QueryParam("depthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -698,12 +719,7 @@ func getEstateDetail(c echo.Context) error {
 	return c.JSON(http.StatusOK, estate)
 }
 
-func getRange(cond RangeCondition, rangeID string) (*Range, error) {
-	RangeIndex, err := strconv.Atoi(rangeID)
-	if err != nil {
-		return nil, err
-	}
-
+func getRange(cond RangeCondition, RangeIndex int) (*Range, error) {
 	if RangeIndex < 0 || len(cond.Ranges) <= RangeIndex {
 		return nil, fmt.Errorf("Unexpected Range ID")
 	}
@@ -741,6 +757,7 @@ func postEstate(c echo.Context) error {
 	}
 	defer tx.Rollback()
 	defer tx2.Rollback()
+	estates := make([]Estate, 0, 1000)
 	for _, row := range records {
 		rm := RecordMapper{Record: row}
 		id := rm.NextInt()
@@ -776,6 +793,21 @@ func postEstate(c echo.Context) error {
 			c.Logger().Errorf("failed to insert estate: %v", err)
 			return c.NoContent(http.StatusInternalServerError)
 		}
+
+		estates = append(estates, Estate{
+			ID:          int64(id),
+			Thumbnail:   thumbnail,
+			Name:        name,
+			Description: description,
+			Latitude:    latitude,
+			Longitude:   longitude,
+			Address:     address,
+			Rent:        int64(rent),
+			DoorHeight:  int64(doorHeight),
+			DoorWidth:   int64(doorWidth),
+			Features:    features,
+			Popularity:  int64(popularity),
+		})
 	}
 	if err := tx.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
@@ -792,8 +824,21 @@ func searchEstates(c echo.Context) error {
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
 
+	simple := true
+	condCount := 0
+	doorHeightID := -1
+	doorWidthID := -1
+	rentID := -1
+	var err error
+
 	if c.QueryParam("doorHeightRangeId") != "" {
-		doorHeight, err := getRange(estateSearchCondition.DoorHeight, c.QueryParam("doorHeightRangeId"))
+		condCount++
+		doorHeightID, err = strconv.Atoi(c.QueryParam("doorHeightRangeId"))
+		if err != nil {
+			log.Print(err)
+			return err
+		}
+		doorHeight, err := getRange(estateSearchCondition.DoorHeight, doorHeightID)
 		if err != nil {
 			c.Echo().Logger.Infof("doorHeightRangeID invalid, %v : %v", c.QueryParam("doorHeightRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -810,7 +855,13 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("doorWidthRangeId") != "" {
-		doorWidth, err := getRange(estateSearchCondition.DoorWidth, c.QueryParam("doorWidthRangeId"))
+		condCount++
+		doorWidthID, err = strconv.Atoi(c.QueryParam("doorWidthRangeId"))
+		if err != nil {
+			log.Print(err)
+			return err
+		}
+		doorWidth, err := getRange(estateSearchCondition.DoorWidth, doorWidthID)
 		if err != nil {
 			c.Echo().Logger.Infof("doorWidthRangeID invalid, %v : %v", c.QueryParam("doorWidthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -827,7 +878,13 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("rentRangeId") != "" {
-		estateRent, err := getRange(estateSearchCondition.Rent, c.QueryParam("rentRangeId"))
+		condCount++
+		rentID, err = strconv.Atoi(c.QueryParam("rentRangeId"))
+		if err != nil {
+			log.Print(err)
+			return err
+		}
+		estateRent, err := getRange(estateSearchCondition.Rent, rentID)
 		if err != nil {
 			c.Echo().Logger.Infof("rentRangeID invalid, %v : %v", c.QueryParam("rentRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -844,6 +901,8 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("features") != "" {
+		condCount++
+		simple = false
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
 			conditions = append(conditions, "features like concat('%', ?, '%')")
 			params = append(params, f)
@@ -865,6 +924,33 @@ func searchEstates(c echo.Context) error {
 	if err != nil {
 		c.Logger().Infof("Invalid format perPage parameter : %v", err)
 		return c.NoContent(http.StatusBadRequest)
+	}
+
+	if simple && condCount == 1 {
+		estates := []Estate{}
+		switch {
+		case doorHeightID > -1:
+			estates = searchEstateByHeight(doorHeightID)
+		case doorWidthID > -1:
+			estates = searchEstateByWidth(doorWidthID)
+		case rentID > -1:
+			estates = searchEstateByRent(rentID)
+		default:
+			panic("XXXX no simple search!!!!")
+		}
+
+		var res EstateSearchResponse
+		res.Count = int64(len(estates))
+		min := perPage * page
+		max := min + perPage
+		if max > len(estates) {
+			max = len(estates)
+		}
+		if min > len(estates) {
+			min = len(estates)
+		}
+		res.Estates = estates[min:max]
+		return c.JSON(http.StatusOK, res)
 	}
 
 	searchQuery := "SELECT * FROM estate WHERE "
