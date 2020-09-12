@@ -130,17 +130,6 @@ func initEstateCache() {
 	//}
 }
 
-func appendEstateCache(estates []Estate) {
-	mEstate.Lock()
-	defer mEstate.Unlock()
-	estateCache = append(estateCache, estates...)
-
-	for _, es := range estates {
-		appendCountCache(es)
-	}
-	sortCountCache()
-}
-
 func searchEstateByWidth(widthID int) []Estate {
 	mEstate.RLock()
 	defer mEstate.RUnlock()

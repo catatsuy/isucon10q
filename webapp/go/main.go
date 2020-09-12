@@ -777,7 +777,9 @@ func postEstate(c echo.Context) error {
 	}
 	defer tx.Rollback()
 	defer tx2.Rollback()
-	estates := make([]Estate, 0, 1000)
+
+	values := make([]string, 0, len(records))
+
 	for _, row := range records {
 		rm := RecordMapper{Record: row}
 		id := rm.NextInt()
@@ -796,39 +798,27 @@ func postEstate(c echo.Context) error {
 			c.Logger().Errorf("failed to read record: %v", err)
 			return c.NoContent(http.StatusBadRequest)
 		}
-		errCh := make(chan error)
-		go func(id int, name string, description string, thumbnail string, address string, latitude float64, longitude float64, rent int, doorHeight int, doorWidth int, features string, popularity int) {
-			_, err = tx2.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
-			if err != nil {
-				errCh <- err
-			}
-			errCh <- nil
-		}(id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
-		_, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
-		if err != nil {
-			c.Logger().Errorf("failed to insert estate: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
-		if err := <-errCh; err != nil {
-			c.Logger().Errorf("failed to insert estate: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
-
-		estates = append(estates, Estate{
-			ID:          int64(id),
-			Thumbnail:   thumbnail,
-			Name:        name,
-			Description: description,
-			Latitude:    latitude,
-			Longitude:   longitude,
-			Address:     address,
-			Rent:        int64(rent),
-			DoorHeight:  int64(doorHeight),
-			DoorWidth:   int64(doorWidth),
-			Features:    features,
-			Popularity:  int64(popularity),
-		})
+		values = append(values, fmt.Sprintf(`(%d,"%s","%s","%s","%s",%g,%g,%d,%d,%d,"%s",%d)`, id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity))
 	}
+
+	errCh := make(chan error)
+	go func() {
+		_, err = tx2.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES " + strings.Join(values, ","))
+		if err != nil {
+			errCh <- err
+		}
+		errCh <- nil
+	}()
+	_, err = tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES " + strings.Join(values, ","))
+	if err != nil {
+		c.Logger().Errorf("failed to insert estate: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	if err := <-errCh; err != nil {
+		c.Logger().Errorf("failed to insert estate: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
+
 	if err := tx.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
@@ -837,7 +827,6 @@ func postEstate(c echo.Context) error {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	//appendEstateCache(estates)
 	initEstateCache()
 	return c.NoContent(http.StatusCreated)
 }
@@ -972,7 +961,7 @@ func searchEstates(c echo.Context) error {
 		if min > len(estates) {
 			min = len(estates)
 		}
-		//fmt.Printf("min=%v max=%v\n", min, max)
+		//バグってるので使わない
 		//res.Estates = estates[min:max]
 		//return c.JSON(http.StatusOK, res)
 	}
@@ -1003,16 +992,6 @@ func searchEstates(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	if condCount == 1 {
-		if len(res.Estates) != len(estates) {
-			fmt.Printf("estate mismatch: %v %v\n", len(res.Estates), len(estates))
-		}
-		for i, es := range res.Estates {
-			if es.ID != estates[i].ID {
-				fmt.Printf("%v %v %v\n", i, es.ID, estates[i].ID)
-			}
-		}
-	}
 	res.Estates = estates
 
 	return c.JSON(http.StatusOK, res)
@@ -1095,6 +1074,7 @@ func searchEstateNazotte(c echo.Context) error {
 	}
 
 	estatesInPolygon := []Estate{}
+	index := 0
 	for _, estate := range estatesInBoundingBox {
 		validatedEstate := Estate{}
 
@@ -1110,6 +1090,10 @@ func searchEstateNazotte(c echo.Context) error {
 			}
 		} else {
 			estatesInPolygon = append(estatesInPolygon, validatedEstate)
+			index++
+			if index == NazotteLimit {
+				break
+			}
 		}
 	}
 
