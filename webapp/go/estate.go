@@ -1,6 +1,7 @@
 package main
 
 import (
+	//"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -59,8 +60,8 @@ func (a byPopularity) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func sortCountCache() {
 	sort.Sort(byPopularity(esCountByWidth[0]))
 	sort.Sort(byPopularity(esCountByWidth[1]))
-	sort.Sort(byPopularity(esCountByWidth[0]))
-	sort.Sort(byPopularity(esCountByWidth[0]))
+	sort.Sort(byPopularity(esCountByWidth[2]))
+	sort.Sort(byPopularity(esCountByWidth[3]))
 
 	sort.Sort(byPopularity(esCountByHeight[0]))
 	sort.Sort(byPopularity(esCountByHeight[1]))
@@ -91,6 +92,25 @@ func initEstateCache() {
 		appendCountCache(es)
 	}
 	sortCountCache()
+
+	//fmt.Println("countbywidth")
+	//for i, s := range esCountByWidth {
+	//	for j, t := range s {
+	//		fmt.Printf("%v,%v, %+v\n", i, j, t)
+	//	}
+	//}
+	//fmt.Println("countbyheight")
+	//for i, s := range esCountByHeight {
+	//	for j, t := range s {
+	//		fmt.Printf("%v,%v, %+v\n", i, j, t)
+	//	}
+	//}
+	//fmt.Println("countbyrent")
+	//for i, s := range esCountByRent {
+	//	for j, t := range s {
+	//		fmt.Printf("%v,%v, %+v\n", i, j, t)
+	//	}
+	//}
 }
 
 func appendEstateCache(estates []Estate) {
