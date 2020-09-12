@@ -27,9 +27,13 @@ const Limit = 20
 const NazotteLimit = 50
 
 var db *sqlx.DB
+var db2 *sqlx.DB
 var mySQLConnectionData *MySQLConnectionEnv
+var mySQLConnectionData2 *MySQLConnectionEnv
 var chairSearchCondition ChairSearchCondition
 var estateSearchCondition EstateSearchCondition
+
+var isDev bool
 
 type InitializeResponse struct {
 	Language string `json:"language"`
@@ -211,6 +215,16 @@ func NewMySQLConnectionEnv() *MySQLConnectionEnv {
 	}
 }
 
+func NewMySQLConnectionEnv2() *MySQLConnectionEnv {
+	return &MySQLConnectionEnv{
+		Host:     getEnv("MYSQL2_HOST", "127.0.0.1"),
+		Port:     getEnv("MYSQL_PORT", "3306"),
+		User:     getEnv("MYSQL_USER", "isucon"),
+		DBName:   getEnv("MYSQL_DBNAME", "isuumo"),
+		Password: getEnv("MYSQL_PASS", "isucon"),
+	}
+}
+
 func getEnv(key, defaultValue string) string {
 	val := os.Getenv(key)
 	if val != "" {
@@ -247,7 +261,6 @@ func init() {
 }
 
 func main() {
-	var isDev bool
 	if os.Getenv("DEV") == "1" {
 		isDev = true
 	}
@@ -285,23 +298,38 @@ func main() {
 	e.GET("/api/recommended_estate/:id", searchRecommendedEstateWithChair)
 
 	mySQLConnectionData = NewMySQLConnectionEnv()
+	// estateはupdateがないのでestateへのSELECT専用として別サーバーを用意する
+	// レプリケーションはしていないので注意
+	mySQLConnectionData2 = NewMySQLConnectionEnv2()
 
 	var err error
+	var err2 error
 	if isDev {
 		// カレントディレクトリの隣にdataディレクトリを置いて
 		e.Use(middleware.Static("data"))
 		proxy.RegisterTracer()
 		db, err = mySQLConnectionData.ConnectDBDev()
+		db2, err2 = mySQLConnectionData2.ConnectDBDev()
 	} else {
 		db, err = mySQLConnectionData.ConnectDB()
+		db2, err2 = mySQLConnectionData2.ConnectDB()
 	}
 	if err != nil {
 		e.Logger.Fatalf("DB connection failed : %v", err)
 	}
+	if err2 != nil {
+		e.Logger.Fatalf("DB connection failed : %v", err2)
+	}
 	db.SetMaxOpenConns(4)
 	db.SetMaxIdleConns(4)
 	db.SetConnMaxLifetime(time.Minute * 2)
+
+	db2.SetMaxOpenConns(4)
+	db2.SetMaxIdleConns(4)
+	db2.SetConnMaxLifetime(time.Minute * 2)
+
 	defer db.Close()
+	defer db2.Close()
 
 	// Start server
 	serverPort := fmt.Sprintf(":%v", getEnv("SERVER_PORT", "1323"))
@@ -318,15 +346,38 @@ func initialize(c echo.Context) error {
 
 	for _, p := range paths {
 		sqlFile, _ := filepath.Abs(p)
-		cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
-			mySQLConnectionData.Host,
-			mySQLConnectionData.User,
-			mySQLConnectionData.Password,
-			mySQLConnectionData.Port,
-			mySQLConnectionData.DBName,
-			sqlFile,
-		)
-		if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
+		errCh := make(chan error)
+
+		go func(sqlFile string) {
+			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
+				mySQLConnectionData2.Host,
+				mySQLConnectionData2.User,
+				mySQLConnectionData2.Password,
+				mySQLConnectionData2.Port,
+				mySQLConnectionData2.DBName,
+				sqlFile,
+			)
+			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
+				errCh <- err
+			}
+			errCh <- nil
+		}(sqlFile)
+
+		if !isDev {
+			cmdStr := fmt.Sprintf("mysql -h %v -u %v -p%v -P %v %v < %v",
+				mySQLConnectionData.Host,
+				mySQLConnectionData.User,
+				mySQLConnectionData.Password,
+				mySQLConnectionData.Port,
+				mySQLConnectionData.DBName,
+				sqlFile,
+			)
+			if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
+				c.Logger().Errorf("Initialize script error : %v", err)
+				return c.NoContent(http.StatusInternalServerError)
+			}
+		}
+		if err := <-errCh; err != nil {
 			c.Logger().Errorf("Initialize script error : %v", err)
 			return c.NoContent(http.StatusInternalServerError)
 		}
