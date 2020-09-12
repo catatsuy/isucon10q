@@ -9,7 +9,6 @@ import (
 
 var (
 	mEstate         sync.RWMutex
-	estateCache     []Estate
 	esCountByWidth  [][]Estate
 	esCountByHeight [][]Estate
 	esCountByRent   [][]Estate
@@ -93,6 +92,7 @@ func initEstateCache() {
 	mEstate.Lock()
 	defer mEstate.Unlock()
 
+	var estateCache []Estate
 	err := db.Select(&estateCache, "SELECT * FROM estate")
 	if err != nil {
 		log.Printf("ERROR!!! failed to load estate: %v", err)
