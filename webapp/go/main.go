@@ -837,7 +837,8 @@ func postEstate(c echo.Context) error {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	appendEstateCache(estates)
+	//appendEstateCache(estates)
+	initEstateCache()
 	return c.NoContent(http.StatusCreated)
 }
 
@@ -899,8 +900,8 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("rentRangeId") != "" {
-		simple = false
 		condCount++
+		simple = false
 		rentID, err = strconv.Atoi(c.QueryParam("rentRangeId"))
 		if err != nil {
 			log.Print(err)
