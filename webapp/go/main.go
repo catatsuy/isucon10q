@@ -331,6 +331,25 @@ func main() {
 	defer db.Close()
 	defer db2.Close()
 
+	for {
+		_, err := db.Exec("SELECT 42")
+		if err == nil {
+			break
+		}
+		log.Print(err)
+		time.Sleep(time.Second * 2)
+	}
+	for {
+		_, err := db2.Exec("SELECT 42")
+		if err == nil {
+			break
+		}
+		log.Print(err)
+		time.Sleep(time.Second * 2)
+	}
+	log.Print("DB Ready!")
+
+	initEstateCache()
 	// Start server
 	serverPort := fmt.Sprintf(":%v", getEnv("SERVER_PORT", "1323"))
 	e.Logger.Fatal(e.Start(serverPort))
@@ -382,6 +401,8 @@ func initialize(c echo.Context) error {
 			return c.NoContent(http.StatusInternalServerError)
 		}
 	}
+
+	initEstateCache()
 
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "go",
@@ -474,7 +495,12 @@ func searchChairs(c echo.Context) error {
 	params := make([]interface{}, 0)
 
 	if c.QueryParam("priceRangeId") != "" {
-		chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
+		rangeID, err := strconv.Atoi(c.QueryParam("priceRangeId"))
+		if err != nil {
+			c.Echo().Logger.Infof("priceRangeID invalid, %v : %v", c.QueryParam("priceRangeId"), err)
+			return c.NoContent(http.StatusBadRequest)
+		}
+		chairPrice, err := getRange(chairSearchCondition.Price, rangeID)
 		if err != nil {
 			c.Echo().Logger.Infof("priceRangeID invalid, %v : %v", c.QueryParam("priceRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -491,7 +517,12 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("heightRangeId") != "" {
-		chairHeight, err := getRange(chairSearchCondition.Height, c.QueryParam("heightRangeId"))
+		rangeID, err := strconv.Atoi(c.QueryParam("heightRangeId"))
+		if err != nil {
+			c.Echo().Logger.Infof("heightRangeId invalid, %v : %v", c.QueryParam("heightRangeId"), err)
+			return c.NoContent(http.StatusBadRequest)
+		}
+		chairHeight, err := getRange(chairSearchCondition.Height, rangeID)
 		if err != nil {
 			c.Echo().Logger.Infof("heightRangeIf invalid, %v : %v", c.QueryParam("heightRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -508,7 +539,12 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("widthRangeId") != "" {
-		chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
+		rangeID, err := strconv.Atoi(c.QueryParam("widthRangeId"))
+		if err != nil {
+			c.Echo().Logger.Infof("widthRangeId invalid, %v : %v", c.QueryParam("widthRangeId"), err)
+			return c.NoContent(http.StatusBadRequest)
+		}
+		chairWidth, err := getRange(chairSearchCondition.Width, rangeID)
 		if err != nil {
 			c.Echo().Logger.Infof("widthRangeID invalid, %v : %v", c.QueryParam("widthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -525,7 +561,12 @@ func searchChairs(c echo.Context) error {
 	}
 
 	if c.QueryParam("depthRangeId") != "" {
-		chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
+		rangeID, err := strconv.Atoi(c.QueryParam("depthRangeId"))
+		if err != nil {
+			c.Echo().Logger.Infof("depthRangeId invalid, %v : %v", c.QueryParam("heightRangeId"), err)
+			return c.NoContent(http.StatusBadRequest)
+		}
+		chairDepth, err := getRange(chairSearchCondition.Depth, rangeID)
 		if err != nil {
 			c.Echo().Logger.Infof("depthRangeId invalid, %v : %v", c.QueryParam("depthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -698,12 +739,7 @@ func getEstateDetail(c echo.Context) error {
 	return c.JSON(http.StatusOK, estate)
 }
 
-func getRange(cond RangeCondition, rangeID string) (*Range, error) {
-	RangeIndex, err := strconv.Atoi(rangeID)
-	if err != nil {
-		return nil, err
-	}
-
+func getRange(cond RangeCondition, RangeIndex int) (*Range, error) {
 	if RangeIndex < 0 || len(cond.Ranges) <= RangeIndex {
 		return nil, fmt.Errorf("Unexpected Range ID")
 	}
@@ -791,6 +827,7 @@ func postEstate(c echo.Context) error {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+	initEstateCache()
 	return c.NoContent(http.StatusCreated)
 }
 
@@ -798,8 +835,20 @@ func searchEstates(c echo.Context) error {
 	conditions := make([]string, 0)
 	params := make([]interface{}, 0)
 
+	condCount := 0
+	doorHeightID := -1
+	doorWidthID := -1
+	rentID := -1
+	var err error
+
 	if c.QueryParam("doorHeightRangeId") != "" {
-		doorHeight, err := getRange(estateSearchCondition.DoorHeight, c.QueryParam("doorHeightRangeId"))
+		condCount++
+		doorHeightID, err = strconv.Atoi(c.QueryParam("doorHeightRangeId"))
+		if err != nil {
+			log.Print(err)
+			return err
+		}
+		doorHeight, err := getRange(estateSearchCondition.DoorHeight, doorHeightID)
 		if err != nil {
 			c.Echo().Logger.Infof("doorHeightRangeID invalid, %v : %v", c.QueryParam("doorHeightRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -816,7 +865,13 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("doorWidthRangeId") != "" {
-		doorWidth, err := getRange(estateSearchCondition.DoorWidth, c.QueryParam("doorWidthRangeId"))
+		condCount++
+		doorWidthID, err = strconv.Atoi(c.QueryParam("doorWidthRangeId"))
+		if err != nil {
+			log.Print(err)
+			return err
+		}
+		doorWidth, err := getRange(estateSearchCondition.DoorWidth, doorWidthID)
 		if err != nil {
 			c.Echo().Logger.Infof("doorWidthRangeID invalid, %v : %v", c.QueryParam("doorWidthRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -833,7 +888,13 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("rentRangeId") != "" {
-		estateRent, err := getRange(estateSearchCondition.Rent, c.QueryParam("rentRangeId"))
+		condCount++
+		rentID, err = strconv.Atoi(c.QueryParam("rentRangeId"))
+		if err != nil {
+			log.Print(err)
+			return err
+		}
+		estateRent, err := getRange(estateSearchCondition.Rent, rentID)
 		if err != nil {
 			c.Echo().Logger.Infof("rentRangeID invalid, %v : %v", c.QueryParam("rentRangeId"), err)
 			return c.NoContent(http.StatusBadRequest)
@@ -850,6 +911,7 @@ func searchEstates(c echo.Context) error {
 	}
 
 	if c.QueryParam("features") != "" {
+		condCount += 2
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
 			conditions = append(conditions, "features like concat('%', ?, '%')")
 			params = append(params, f)
@@ -873,20 +935,54 @@ func searchEstates(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
+	estates := []Estate{}
+	var res EstateSearchResponse
+	if condCount == 1 {
+		switch {
+		case doorHeightID > -1:
+			estates = searchEstateByHeight(doorHeightID)
+			//fmt.Printf("heightID=%v, len=%v\n", doorHeightID, len(estates))
+		case doorWidthID > -1:
+			estates = searchEstateByWidth(doorWidthID)
+			//fmt.Printf("width=%v, len=%v\n", doorWidthID, len(estates))
+		case rentID > -1:
+			estates = searchEstateByRent(rentID)
+			//fmt.Printf("rent=%v, len=%v\n", rentID, len(estates))
+		default:
+			panic("XXXX no simple search!!!!")
+		}
+
+		res.Count = int64(len(estates))
+		min := perPage * page
+		max := min + perPage
+		if max > len(estates) {
+			max = len(estates)
+		}
+		if min > len(estates) {
+			min = len(estates)
+		}
+		//バグってるので使わない
+		//res.Estates = estates[min:max]
+		//return c.JSON(http.StatusOK, res)
+	}
+
 	searchQuery := "SELECT * FROM estate WHERE "
 	countQuery := "SELECT COUNT(*) FROM estate WHERE "
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
-	var res EstateSearchResponse
-	err = db2.Get(&res.Count, countQuery+searchCondition, params...)
-	if err != nil {
-		c.Logger().Errorf("searchEstates DB execution error : %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+	if condCount != 1 {
+		var Count int64
+		err = db2.Get(&Count, countQuery+searchCondition, params...)
+		if err != nil {
+			c.Logger().Errorf("searchEstates DB execution error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		res.Count = Count
 	}
 
-	estates := []Estate{}
 	params = append(params, perPage, page*perPage)
+	estates = []Estate{}
 	err = db2.Select(&estates, searchQuery+searchCondition+limitOffset, params...)
 	if err != nil {
 		if err == sql.ErrNoRows {
