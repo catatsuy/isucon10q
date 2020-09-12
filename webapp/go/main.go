@@ -19,9 +19,9 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
-)
 
-const LocalDebug = true
+	proxy "github.com/shogo82148/go-sql-proxy"
+)
 
 const Limit = 20
 const NazotteLimit = 50
@@ -225,6 +225,11 @@ func (mc *MySQLConnectionEnv) ConnectDB() (*sqlx.DB, error) {
 	return sqlx.Open("mysql", dsn)
 }
 
+func (mc *MySQLConnectionEnv) ConnectDBDev() (*sqlx.DB, error) {
+	dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?interpolateParams=true", mc.User, mc.Password, mc.Host, mc.Port, mc.DBName)
+	return sqlx.Open("mysql:trace", dsn)
+}
+
 func init() {
 	jsonText, err := ioutil.ReadFile("../fixture/chair_condition.json")
 	if err != nil {
@@ -251,12 +256,6 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// ローカル環境用.
-	if LocalDebug {
-		// カレントディレクトリの隣にdataディレクトリを置いて
-		e.Use(middleware.Static("data"))
-	}
-
 	// Initialize
 	e.POST("/initialize", initialize)
 
@@ -280,8 +279,20 @@ func main() {
 
 	mySQLConnectionData = NewMySQLConnectionEnv()
 
+	var isDev bool
+	if os.Getenv("DEV") == "1" {
+		isDev = true
+	}
+
 	var err error
-	db, err = mySQLConnectionData.ConnectDB()
+	if isDev {
+		// カレントディレクトリの隣にdataディレクトリを置いて
+		e.Use(middleware.Static("data"))
+		proxy.RegisterTracer()
+		db, err = mySQLConnectionData.ConnectDBDev()
+	} else {
+		db, err = mySQLConnectionData.ConnectDB()
+	}
 	if err != nil {
 		e.Logger.Fatalf("DB connection failed : %v", err)
 	}
