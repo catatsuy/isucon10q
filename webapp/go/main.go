@@ -331,6 +331,24 @@ func main() {
 	defer db.Close()
 	defer db2.Close()
 
+	for {
+		_, err := db.Exec("SELECT 42")
+		if err == nil {
+			break
+		}
+		log.Print(err)
+		time.Sleep(time.Second * 2)
+	}
+	for {
+		_, err := db2.Exec("SELECT 42")
+		if err == nil {
+			break
+		}
+		log.Print(err)
+		time.Sleep(time.Second * 2)
+	}
+	log.Print("DB Ready!")
+
 	initEstateCache()
 	// Start server
 	serverPort := fmt.Sprintf(":%v", getEnv("SERVER_PORT", "1323"))
@@ -383,6 +401,8 @@ func initialize(c echo.Context) error {
 			return c.NoContent(http.StatusInternalServerError)
 		}
 	}
+
+	initEstateCache()
 
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "go",
