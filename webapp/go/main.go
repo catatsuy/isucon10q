@@ -20,6 +20,8 @@ import (
 	"github.com/labstack/gommon/log"
 )
 
+const LocalDebug = true
+
 const Limit = 20
 const NazotteLimit = 50
 
@@ -247,6 +249,12 @@ func main() {
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+
+	// ローカル環境用.
+	if LocalDebug {
+		// カレントディレクトリの隣にdataディレクトリを置いて
+		e.Use(middleware.Static("data"))
+	}
 
 	// Initialize
 	e.POST("/initialize", initialize)
