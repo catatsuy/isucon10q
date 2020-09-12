@@ -4,7 +4,7 @@ set -x
 
 echo "start deploy ${USER}"
 GOOS=linux go build -o isuumo -v .
-for server in isu01 isu02 isu03; do
+for server in isu01 ; do
   echo "deploy to $server"
   ssh -t $server "sudo systemctl stop isuumo.go.service"
   scp ./isuumo $server:/home/isucon/isuumo/webapp/go/isuumo
