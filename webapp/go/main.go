@@ -1072,9 +1072,10 @@ func searchEstateNazotte(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
+	b := coordinates.getBoundingBox()
 	estatesInPolygon := []Estate{}
-	query := `SELECT * FROM estate WHERE ST_Contains(ST_PolygonFromText(?), POINT(latitude,longitude)) ORDER BY popularity DESC, id ASC`
-	err = db2.Select(&estatesInPolygon, query, coordinates.coordinatesToText())
+	query := `SELECT * FROM estate WHERE latitude BETWEEN ? AND ? AND ST_Contains(ST_PolygonFromText(?), POINT(latitude,longitude)) ORDER BY popularity DESC, id ASC`
+	err = db2.Select(&estatesInPolygon, query, b.TopLeftCorner.Latitude, b.BottomRightCorner.Latitude, coordinates.coordinatesToText())
 	if err == sql.ErrNoRows {
 		c.Echo().Logger.Infof("select * from estate where latitude ...", err)
 		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
