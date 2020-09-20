@@ -1041,10 +1041,10 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 	d := chair.Depth
 	x := w
 	y := h
-	switch {
-	case d < x:
-		x = d
-	case d < y:
+	if y < x {
+		x, y = y, x
+	}
+	if d < y {
 		y = d
 	}
 	query = `SELECT * FROM estate WHERE (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) ORDER BY popularity DESC, id ASC LIMIT ?`
