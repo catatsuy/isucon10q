@@ -268,11 +268,11 @@ func main() {
 	// Echo instance
 	e := echo.New()
 	if isDev {
-		e.Debug = true
-		e.Logger.SetLevel(log.DEBUG)
+		//e.Debug = true
+		//e.Logger.SetLevel(log.DEBUG)
 
 		// Middleware
-		e.Use(middleware.Logger())
+		//e.Use(middleware.Logger())
 		e.Use(middleware.Recover())
 	}
 
