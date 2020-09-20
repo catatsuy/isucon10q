@@ -802,30 +802,36 @@ func postEstate(c echo.Context) error {
 	}
 
 	errCh := make(chan error)
-	go func() {
-		_, err = tx2.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES " + strings.Join(values, ","))
-		if err != nil {
-			errCh <- err
-		}
-		errCh <- nil
-	}()
+	if !isDev {
+		go func() {
+			_, err = tx2.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES " + strings.Join(values, ","))
+			if err != nil {
+				errCh <- err
+			}
+			errCh <- nil
+		}()
+	}
 	_, err = tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES " + strings.Join(values, ","))
 	if err != nil {
 		c.Logger().Errorf("failed to insert estate: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	if err := <-errCh; err != nil {
-		c.Logger().Errorf("failed to insert estate: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+	if !isDev {
+		if err := <-errCh; err != nil {
+			c.Logger().Errorf("failed to insert estate: %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	if err := tx2.Commit(); err != nil {
-		c.Logger().Errorf("failed to commit tx: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+	if !isDev {
+		if err := tx2.Commit(); err != nil {
+			c.Logger().Errorf("failed to commit tx: %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
 	}
 	initEstateCache()
 	return c.NoContent(http.StatusCreated)
