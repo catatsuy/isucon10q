@@ -967,9 +967,8 @@ func searchEstates(c echo.Context) error {
 		if min > len(estates) {
 			min = len(estates)
 		}
-		//バグってるので使わない
-		//res.Estates = estates[min:max]
-		//return c.JSON(http.StatusOK, res)
+		res.Estates = estates[min:max]
+		return c.JSON(http.StatusOK, res)
 	}
 
 	searchQuery := "SELECT * FROM estate WHERE "
@@ -977,15 +976,13 @@ func searchEstates(c echo.Context) error {
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
-	if condCount != 1 {
-		var Count int64
-		err = db2.Get(&Count, countQuery+searchCondition, params...)
-		if err != nil {
-			c.Logger().Errorf("searchEstates DB execution error : %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
-		res.Count = Count
+	var Count int64
+	err = db2.Get(&Count, countQuery+searchCondition, params...)
+	if err != nil {
+		c.Logger().Errorf("searchEstates DB execution error : %v", err)
+		return c.NoContent(http.StatusInternalServerError)
 	}
+	res.Count = Count
 
 	params = append(params, perPage, page*perPage)
 	estates = []Estate{}
