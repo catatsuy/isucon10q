@@ -77,15 +77,15 @@ func sortCountCache() {
 	sort.Sort(byPopularity(esCountByRent[2]))
 	sort.Sort(byPopularity(esCountByRent[3]))
 
-	for i := 0; i < 4; i++ {
-		fmt.Printf("width[%v]=%v\n", i, len(esCountByWidth[i]))
-	}
-	for i := 0; i < 4; i++ {
-		fmt.Printf("height[%v]=%v\n", i, len(esCountByHeight[i]))
-	}
-	for i := 0; i < 4; i++ {
-		fmt.Printf("rent[%v]=%v\n", i, len(esCountByRent[i]))
-	}
+	//for i := 0; i < 4; i++ {
+	//	fmt.Printf("width[%v]=%v\n", i, len(esCountByWidth[i]))
+	//}
+	//for i := 0; i < 4; i++ {
+	//	fmt.Printf("height[%v]=%v\n", i, len(esCountByHeight[i]))
+	//}
+	//for i := 0; i < 4; i++ {
+	//	fmt.Printf("rent[%v]=%v\n", i, len(esCountByRent[i]))
+	//}
 }
 
 func initEstateCache() {
