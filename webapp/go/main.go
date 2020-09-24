@@ -80,6 +80,7 @@ type Estate struct {
 	DoorWidth   int64   `db:"door_width" json:"doorWidth"`
 	Features    string  `db:"features" json:"features"`
 	Popularity  int64   `db:"popularity" json:"-"`
+	Point       string  `db:"point" json:"-"`
 }
 
 //EstateSearchResponse estate/searchへのレスポンスの形式
@@ -1203,10 +1204,9 @@ func searchEstateNazotte(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	b := coordinates.getBoundingBox()
 	estatesInPolygon := []Estate{}
-	query := `SELECT * FROM estate WHERE latitude BETWEEN ? AND ? AND ST_Contains(ST_PolygonFromText(?), POINT(latitude,longitude)) ORDER BY popularity DESC, id ASC`
-	err = db2.Select(&estatesInPolygon, query, b.TopLeftCorner.Latitude, b.BottomRightCorner.Latitude, coordinates.coordinatesToText())
+	query := `SELECT * FROM estate WHERE ST_Contains(ST_PolygonFromText(?), point) ORDER BY popularity DESC, id ASC`
+	err = db2.Select(&estatesInPolygon, query, coordinates.coordinatesToText())
 	if err == sql.ErrNoRows {
 		c.Echo().Logger.Infof("select * from estate where latitude ...", err)
 		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
