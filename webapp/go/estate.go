@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"sort"
@@ -12,6 +13,7 @@ var (
 	esCountByWidth  [][]Estate
 	esCountByHeight [][]Estate
 	esCountByRent   [][]Estate
+	estateByID      = make(map[int64]Estate)
 )
 
 func appendCountCache(es Estate) {
@@ -92,6 +94,8 @@ func initEstateCache() {
 	mEstate.Lock()
 	defer mEstate.Unlock()
 
+	estateByID = make(map[int64]Estate)
+
 	var estateCache []Estate
 	err := db.Select(&estateCache, "SELECT * FROM estate")
 	if err != nil {
@@ -107,6 +111,7 @@ func initEstateCache() {
 
 	for _, es := range estateCache {
 		appendCountCache(es)
+		estateByID[es.ID] = es
 	}
 	sortCountCache()
 
@@ -167,4 +172,15 @@ func searchEstateByRent(id int) []Estate {
 	res := make([]Estate, len(esCountByRent[id]))
 	copy(res, esCountByRent[id])
 	return res
+}
+
+func getEstateByID(id int64) (Estate, error) {
+	mEstate.RLock()
+	defer mEstate.RUnlock()
+
+	es, ok := estateByID[id]
+	if !ok {
+		return es, sql.ErrNoRows
+	}
+	return es, nil
 }
