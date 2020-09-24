@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -241,6 +242,7 @@ func (mc *MySQLConnectionEnv) ConnectDB() (*sqlx.DB, error) {
 
 func (mc *MySQLConnectionEnv) ConnectDBDev() (*sqlx.DB, error) {
 	dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?interpolateParams=true", mc.User, mc.Password, mc.Host, mc.Port, mc.DBName)
+	//return sqlx.Open("mysql", dsn)
 	return sqlx.Open("mysql:trace", dsn)
 }
 
@@ -269,7 +271,7 @@ func main() {
 	e := echo.New()
 	if isDev {
 		//e.Debug = true
-		//e.Logger.SetLevel(log.DEBUG)
+		e.Logger.SetLevel(log.DEBUG)
 
 		// Middleware
 		//e.Use(middleware.Logger())
@@ -404,6 +406,11 @@ func initialize(c echo.Context) error {
 
 	initEstateCache()
 
+	muChair.Lock()
+	defer muChair.Unlock()
+	chairsLowPriced = []Chair{}
+	chairByPK = make(map[int64]Chair)
+
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "go",
 	})
@@ -416,9 +423,7 @@ func getChairDetail(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	chair := Chair{}
-	query := `SELECT * FROM chair WHERE id = ?`
-	err = db.Get(&chair, query, id)
+	chair, err := getChairByPK(int64(id))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.Echo().Logger.Infof("requested id's chair not found : %v", id)
@@ -483,6 +488,9 @@ func postChair(c echo.Context) error {
 			return c.NoContent(http.StatusInternalServerError)
 		}
 	}
+	muChair.Lock()
+	defer muChair.Unlock()
+	chairsLowPriced = []Chair{}
 	if err := tx.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
@@ -689,7 +697,13 @@ func buyChair(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	muChair.Lock()
+	defer muChair.Unlock()
+	chairsLowPriced = []Chair{}
+	delete(chairByPK, int64(id))
+
 	err = tx.Commit()
+
 	if err != nil {
 		c.Echo().Logger.Errorf("transaction commit error : %v", err)
 		return c.NoContent(http.StatusInternalServerError)
@@ -702,20 +716,48 @@ func getChairSearchCondition(c echo.Context) error {
 	return c.JSON(http.StatusOK, chairSearchCondition)
 }
 
-func getLowPricedChair(c echo.Context) error {
-	var chairs []Chair
-	query := `SELECT * FROM chair WHERE stock > 0 ORDER BY price ASC, id ASC LIMIT ?`
-	err := db.Select(&chairs, query, Limit)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			c.Logger().Error("getLowPricedChair not found")
-			return c.JSON(http.StatusOK, ChairListResponse{[]Chair{}})
-		}
-		c.Logger().Errorf("getLowPricedChair DB execution error : %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+var (
+	muChair         sync.Mutex
+	chairsLowPriced []Chair
+	chairByPK       = make(map[int64]Chair)
+)
+
+func getChairByPK(id int64) (Chair, error) {
+	muChair.Lock()
+	defer muChair.Unlock()
+
+	ch, ok := chairByPK[id]
+	if ok {
+		return ch, nil
 	}
 
-	return c.JSON(http.StatusOK, ChairListResponse{Chairs: chairs})
+	chair := Chair{}
+	query := `SELECT * FROM chair WHERE id = ?`
+	err := db.Get(&chair, query, id)
+	if err == nil {
+		chairByPK[id] = chair
+	}
+	return chair, err
+}
+
+func getLowPricedChair(c echo.Context) error {
+	muChair.Lock()
+	defer muChair.Unlock()
+
+	if len(chairsLowPriced) == 0 {
+		query := `SELECT * FROM chair WHERE stock > 0 ORDER BY price ASC, id ASC LIMIT ?`
+		err := db.Select(&chairsLowPriced, query, Limit)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				c.Logger().Error("getLowPricedChair not found")
+				return c.JSON(http.StatusOK, ChairListResponse{[]Chair{}})
+			}
+			c.Logger().Errorf("getLowPricedChair DB execution error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
+	}
+
+	return c.JSON(http.StatusOK, ChairListResponse{Chairs: chairsLowPriced})
 }
 
 func getEstateDetail(c echo.Context) error {
@@ -1023,9 +1065,7 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	chair := Chair{}
-	query := `SELECT * FROM chair WHERE id = ?`
-	err = db.Get(&chair, query, id)
+	chair, err := getChairByPK(int64(id))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.Logger().Infof("Requested chair id \"%v\" not found", id)
@@ -1047,7 +1087,7 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 	if d < y {
 		y = d
 	}
-	query = `SELECT * FROM estate WHERE (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) ORDER BY popularity DESC, id ASC LIMIT ?`
+	query := `SELECT * FROM estate WHERE (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) ORDER BY popularity DESC, id ASC LIMIT ?`
 	err = db2.Select(&estates, query, x, y, y, x, Limit)
 	if err != nil {
 		if err == sql.ErrNoRows {
