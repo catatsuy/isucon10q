@@ -420,9 +420,17 @@ func initialize(c echo.Context) error {
 	initEstateCache()
 
 	muChair.Lock()
-	defer muChair.Unlock()
 	chairsLowPriced = []Chair{}
 	chairByPK = make(map[int64]Chair)
+	muChair.Unlock()
+
+	muSearchEstate.Lock()
+	searchEstateCountCache = make(map[string]int64)
+	muSearchEstate.Unlock()
+
+	muSearchChair.Lock()
+	searchChairCountCache = make(map[string]int64)
+	muSearchChair.Unlock()
 
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "go",
@@ -512,20 +520,25 @@ func postChair(c echo.Context) error {
 	muChair.Lock()
 	defer muChair.Unlock()
 	chairsLowPriced = []Chair{}
+
 	if err := tx.Commit(); err != nil {
 		c.Logger().Errorf("failed to commit tx: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+	muSearchChair.Lock()
+	searchChairCountCache = make(map[string]int64)
+	muSearchChair.Unlock()
 	return c.NoContent(http.StatusCreated)
 }
 
 var (
-	searchChairsMtx sync.Mutex
+	muSearchChair         sync.Mutex
+	searchChairCountCache = make(map[string]int64)
 )
 
 func searchChairs(c echo.Context) error {
-	searchChairsMtx.Lock()
-	defer searchChairsMtx.Unlock()
+	time.Sleep(time.Millisecond * 30)
+
 	defer measure.Start(
 		"searchChairs",
 	).Stop()
@@ -663,11 +676,23 @@ func searchChairs(c echo.Context) error {
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
 	var res ChairSearchResponse
-	err = db.Get(&res.Count, countQuery+searchCondition, params...)
-	if err != nil {
-		c.Logger().Errorf("searchChairs DB execution error : %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+
+	// count は order by popularity で打ちきれなくて全件走査してしまうのでキャッシュする
+	cacheKey := fmt.Sprintf("%s;%v", searchCondition, params)
+	muSearchChair.Lock()
+	defer muSearchChair.Unlock()
+
+	var Count int64
+	var ok bool
+	if Count, ok = searchChairCountCache[cacheKey]; !ok {
+		err = db.Get(&Count, countQuery+searchCondition, params...)
+		if err != nil {
+			c.Logger().Errorf("searchChairs DB execution error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		searchChairCountCache[cacheKey] = Count
 	}
+	res.Count = Count
 
 	chairs := []Chair{}
 	params = append(params, perPage, page*perPage)
@@ -733,9 +758,13 @@ func buyChair(c echo.Context) error {
 	}
 
 	muChair.Lock()
-	defer muChair.Unlock()
 	chairsLowPriced = []Chair{}
 	delete(chairByPK, int64(id))
+	muChair.Unlock()
+
+	muSearchChair.Lock()
+	searchChairCountCache = make(map[string]int64)
+	muSearchChair.Unlock()
 
 	err = tx.Commit()
 
@@ -938,13 +967,26 @@ func postEstate(c echo.Context) error {
 		}
 	}
 	initEstateCache()
+
 	muLowPricedEstate.Lock()
 	lowPricedEstate = []Estate{}
 	muLowPricedEstate.Unlock()
+
+	muSearchEstate.Lock()
+	searchEstateCountCache = make(map[string]int64)
+	muSearchEstate.Unlock()
+
 	return c.NoContent(http.StatusCreated)
 }
 
+var (
+	muSearchEstate         sync.Mutex
+	searchEstateCountCache = make(map[string]int64)
+)
+
 func searchEstates(c echo.Context) error {
+	time.Sleep(time.Millisecond * 30)
+
 	defer measure.Start(
 		"searchEstates",
 	).Stop()
@@ -1087,11 +1129,20 @@ func searchEstates(c echo.Context) error {
 	searchCondition := strings.Join(conditions, " AND ")
 	limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
 
+	muSearchEstate.Lock()
+	defer muSearchEstate.Unlock()
+
+	// count は order by popularity で打ちきれなくて全件走査してしまうのでキャッシュする
+	cacheKey := fmt.Sprintf("%s;%v", searchCondition, params)
 	var Count int64
-	err = db2.Get(&Count, countQuery+searchCondition, params...)
-	if err != nil {
-		c.Logger().Errorf("searchEstates DB execution error : %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+	var ok bool
+	if Count, ok = searchEstateCountCache[cacheKey]; !ok {
+		err = db2.Get(&Count, countQuery+searchCondition, params...)
+		if err != nil {
+			c.Logger().Errorf("searchEstates DB execution error : %v", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		searchEstateCountCache[cacheKey] = Count
 	}
 	res.Count = Count
 
@@ -1189,6 +1240,8 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 }
 
 func searchEstateNazotte(c echo.Context) error {
+	time.Sleep(time.Millisecond * 30)
+
 	defer measure.Start(
 		"searchEstateNazotte",
 	).Stop()
